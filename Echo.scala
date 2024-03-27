@@ -10,6 +10,7 @@ import io.circe.parser.*
 import io.circe.*
 import io.circe.generic.semiauto.*
 import io.circe.syntax.*
+import scala.io.StdIn
 
 object Echo extends IOApp.Simple {
   case class InitMessage(src: String, dest: String, body: InitBody)
@@ -21,7 +22,7 @@ object Echo extends IOApp.Simple {
       in_reply_to: Option[Int]
   )
   case class EchoMessage(src: String, dest: String, body: EchoBody)
-  case class EchoBody(`type`: String, msg_id: Int, echo: String)
+  case class EchoBody(`type`: String, msg_id: Int, in_reply_to: Option[Int], echo: String)
 
   implicit def initMessageDecoder: Decoder[InitMessage] = deriveDecoder
   implicit def initMessageEncoder: Encoder[InitMessage] = deriveEncoder
@@ -44,11 +45,12 @@ object Echo extends IOApp.Simple {
   def toEchoResponse(m: EchoMessage, responseId: Int) = EchoMessage(
     src = m.dest,
     dest = m.src,
-    body = EchoBody(`type` = "echo_ok", msg_id = responseId, echo = m.body.echo)
+    body = EchoBody(`type` = "echo_ok", msg_id = responseId, in_reply_to = m.body.msg_id.some, echo = m.body.echo)
   )
   def run =
     Ref.of[IO, Int](0).flatMap { localId =>
-      stdinUtf8[IO](1024)
+      fs2.Stream.repeatEval(Console[IO].readLine) // stdinUtf8[IO](4096) starts truncating input at some point, why?
+        .evalTap(line => Console[IO].errorln(s"Received: $line"))
         .evalMap(in => IO.fromEither(parse(in)))
         .evalMap(json =>
           IO.fromEither(
@@ -68,11 +70,13 @@ object Echo extends IOApp.Simple {
             case m: EchoMessage => toEchoResponse(m, id).asJson.noSpaces
           })
         )
-        .evalTap(IO.println)
+        .evalTap(message => Console[IO].errorln(s"Sending: $message"))
+        .evalTap(Console[IO].println)
         .compile
         .drain
     }
 }
 // {"src": "c1", "dest": "n1", "body": {"msg_id": 1, "type": "init", "node_id": "n1", "node_ids": ["n1"]}}
+// {"src": "c1", "dest": "n1", "body": {"type": "echo", "msg_id": 1, "echo": "Echo 123"}}
 // {src: "n1", dest: "c1", body: {msg_id: 123 in_reply_to: 1, type: "init_ok"}}
 // ../maelstrom/maelstrom test -w echo --bin echo --nodes n1 --time-limit 10 --log-stderr
