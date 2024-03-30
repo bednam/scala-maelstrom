@@ -24,11 +24,16 @@ object Echo extends IOApp.Simple {
   case class EchoMessage(src: String, dest: String, body: EchoBody)
   case class EchoBody(`type`: String, msg_id: Int, in_reply_to: Option[Int], echo: String)
 
-  implicit def initMessageDecoder: Decoder[InitMessage] = deriveDecoder
-  implicit def initMessageEncoder: Encoder[InitMessage] = deriveEncoder
+  implicit val initMessageDecoder: Decoder[InitMessage] = deriveDecoder
+  implicit val initMessageEncoder: Encoder[InitMessage] = deriveEncoder
+  implicit val initBodyEncoder: Encoder[InitBody] = deriveEncoder[InitBody].mapJsonObject(_.filter {
+    case ("node_id", v) => !v.isNull
+    case ("node_ids", v) => !v.isNull
+    case (_, _) => true
+  })
 
-  implicit def echoMessageDecoder: Decoder[EchoMessage] = deriveDecoder
-  implicit def echoMessageEncoder: Encoder[EchoMessage] = deriveEncoder
+  implicit val echoMessageDecoder: Decoder[EchoMessage] = deriveDecoder
+  implicit val echoMessageEncoder: Encoder[EchoMessage] = deriveEncoder
 
   def toInitResponse(m: InitMessage, responseId: Int) = InitMessage(
     src = m.dest,
