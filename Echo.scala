@@ -1,81 +1,46 @@
-//> using toolkit typelevel:0.1.23
+//> using scala 2.13
+//> using toolkit typelevel:0.1.25
 //> using dep io.circe::circe-parser::0.14.6
 //> using dep io.circe::circe-generic::0.14.6
+//> using file Message.scala
 
-import cats.effect.*
-import cats.syntax.all.*
-import fs2.io.*
+import cats.effect._
+import cats.syntax.all._
+import fs2.io._
 import cats.effect.std.Console
-import io.circe.parser.*
-import io.circe.*
-import io.circe.generic.semiauto.*
-import io.circe.syntax.*
+import io.circe.parser._
+import io.circe._
+import io.circe.generic.semiauto._
+import io.circe.syntax._
 import scala.io.StdIn
+import Message._
 
 object Echo extends IOApp.Simple {
-  case class InitMessage(src: String, dest: String, body: InitBody)
-  case class InitBody(
-      `type`: String,
-      msg_id: Int,
-      node_id: Option[String],
-      node_ids: Option[Vector[String]],
-      in_reply_to: Option[Int]
-  )
-  case class EchoMessage(src: String, dest: String, body: EchoBody)
-  case class EchoBody(
-      `type`: String,
-      msg_id: Int,
-      in_reply_to: Option[Int],
-      echo: String
-  )
-
-  implicit val initMessageDecoder: Decoder[InitMessage] = deriveDecoder
-  implicit val initMessageEncoder: Encoder[InitMessage] = deriveEncoder
-  implicit val initBodyEncoder: Encoder[InitBody] =
-    deriveEncoder[InitBody].mapJsonObject(_.filter {
-      case ("node_id", v)  => !v.isNull
-      case ("node_ids", v) => !v.isNull
-      case (_, _)          => true
-    })
-
-  implicit val echoMessageDecoder: Decoder[EchoMessage] = deriveDecoder
-  implicit val echoMessageEncoder: Encoder[EchoMessage] = deriveEncoder
-
-  def toInitResponse(m: InitMessage, responseId: Int) = InitMessage(
-    src = m.dest,
-    dest = m.src,
-    body = InitBody(
-      msg_id = responseId,
-      `type` = "init_ok",
-      node_id = None,
-      node_ids = None,
-      in_reply_to = m.body.msg_id.some
-    )
-  )
-
-  def toEchoResponse(m: EchoMessage, responseId: Int) = EchoMessage(
-    src = m.dest,
-    dest = m.src,
-    body = EchoBody(
-      `type` = "echo_ok",
-      msg_id = responseId,
-      in_reply_to = m.body.msg_id.some,
-      echo = m.body.echo
-    )
-  )
-
   def toMessage(json: Json) =
-    json.hcursor.downField("body").downField("type").as[String] match {
-      case Right("init") => json.as[InitMessage]
-      case Right("echo") => json.as[EchoMessage]
-      case Right(t) =>
-        Left(new Throwable(s"unsupported message type $t"))
-      case Left(_) =>
-        Left(new Throwable("couldn't determine message type"))
-    }
+    json.as[Message]
 
-  def toMessage2(json: Json) = 
-    json.as[InitMessage]
+  def toResponse(m: Message, responseId: Int) =
+    Message(
+      src = m.dest,
+      dest = m.src,
+      body = m match {
+        case Message(_, _, body: InitBody) =>
+          InitBody(
+            msg_id = responseId.some,
+            `type` = "init_ok",
+            node_id = None,
+            node_ids = None,
+            in_reply_to = body.msg_id
+          )
+        case Message(_, _, body: EchoBody) =>
+          EchoBody(
+            `type` = "echo_ok",
+            msg_id = responseId.some,
+            in_reply_to = body.msg_id,
+            echo = body.echo
+          )
+      }
+    )
 
   def run =
     Ref.of[IO, Int](0).flatMap { localId =>
@@ -93,13 +58,9 @@ object Echo extends IOApp.Simple {
         .evalMap(message =>
           localId
             .getAndUpdate(_ + 1)
-            .map(id =>
-              message match {
-                case m: InitMessage => toInitResponse(m, id).asJson.noSpaces
-                case m: EchoMessage => toEchoResponse(m, id).asJson.noSpaces
-              }
-            )
+            .map(id => toResponse(message, id))
         )
+        .map(_.asJson.deepDropNullValues.noSpaces)
         .evalTap(message => Console[IO].errorln(s"Sending: $message"))
         .evalTap(Console[IO].println)
         .compile
