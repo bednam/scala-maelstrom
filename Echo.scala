@@ -24,16 +24,16 @@ object Echo extends IOApp.Simple {
       src = m.dest,
       dest = m.src,
       body = m match {
-        case Message(_, _, body: InitBody) =>
-          InitBody(
+        case Message(_, _, body: InitOk) =>
+          InitOk(
             msg_id = responseId.some,
             `type` = "init_ok",
             node_id = None,
             node_ids = None,
             in_reply_to = body.msg_id
           )
-        case Message(_, _, body: EchoBody) =>
-          EchoBody(
+        case Message(_, _, body: EchoOk) =>
+          EchoOk(
             `type` = "echo_ok",
             msg_id = responseId.some,
             in_reply_to = body.msg_id,
@@ -43,7 +43,7 @@ object Echo extends IOApp.Simple {
     )
 
   def run =
-    Ref.of[IO, Int](0).flatMap { localId =>
+    UniqueID.of[IO].flatMap { id =>
       fs2.Stream
         .repeatEval(
           Console[IO].readLine
@@ -56,15 +56,26 @@ object Echo extends IOApp.Simple {
           )
         )
         .evalMap(message =>
-          localId
-            .getAndUpdate(_ + 1)
-            .map(id => toResponse(message, id))
+          id.next.map(toResponse(message, _))
         )
         .map(_.asJson.deepDropNullValues.noSpaces)
         .evalTap(message => Console[IO].errorln(s"Sending: $message"))
         .evalTap(Console[IO].println)
         .compile
         .drain
+    }
+
+    trait UniqueID[F[_]] {
+      def next: F[Int]
+    }
+
+    object UniqueID {
+      def of[F[_]: Sync]: F[UniqueID[F]] =
+        for {
+          id <- Ref.of[F, Int](0)
+        } yield new UniqueID[F] {
+          def next: F[Int] = id.getAndUpdate(_ + 1)
+        }
     }
 }
 

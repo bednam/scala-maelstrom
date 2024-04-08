@@ -9,7 +9,8 @@ import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.auto._
 
 object Message {
-  implicit val config: Configuration = Configuration.default.withSnakeCaseMemberNames.withDiscriminator("type")
+  implicit val config: Configuration =
+    Configuration.default.withSnakeCaseMemberNames.withDiscriminator("type")
 
   // 1. when sealed trait, when sealed abstract class, anything else?
   /** @param src
@@ -43,13 +44,23 @@ object Message {
     def in_reply_to: Option[Int]
   }
 
-  implicit val bodyDecoder: Decoder[Body] = (cursor: HCursor) => 
+  implicit val bodyDecoder: Decoder[Body] = (cursor: HCursor) =>
     cursor.downField("type").as[String] match {
       case Right("init") => cursor.as[InitOk]
       case Right("echo") => cursor.as[EchoOk]
-      case Right(t) => Left(DecodingFailure(s"Unsupported message type: $t", cursor.history))
+      case Right(t) =>
+        Left(DecodingFailure(s"Unsupported message type: $t", cursor.history))
       case Left(e) => Left[DecodingFailure, Body](e)
     }
+
+  implicit val bodyEncoder: Encoder[Body] =
+    deriveEncoder[Body].mapJsonObject(json =>
+      json("type").flatMap(_.hcursor.downField("type").as[String].toOption) match {
+        case Some("InitOk") => json.add("type", "init_ok".asJson)
+        case Some("EchoOk") => json.add("type", "echo_ok".asJson)
+        case _ => json
+      }
+    )
 
   case class InitOk(
       `type`: String,
@@ -68,5 +79,5 @@ object Message {
       echo: String
   ) extends Body
 
-  implicit val echoOkDecoder: Decoder[EchoOk] = deriveDecoder    
+  implicit val echoOkDecoder: Decoder[EchoOk] = deriveDecoder
 }
