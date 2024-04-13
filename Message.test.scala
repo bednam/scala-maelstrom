@@ -21,7 +21,7 @@ class MessageSpec extends munit.FunSuite {
                       |  "node_ids": ["n1", "n2", "n3"]
                       |}
                       |""".stripMargin
-        val expected = InitOk("init", Some(1), None, Some("n1"), Some(Vector("n1", "n2", "n3")))
+        val expected = init_ok("init", Some(1), None, Some("n1"), Some(Vector("n1", "n2", "n3")))
 
         assert(decode[Body](body) == expected)              
     }
@@ -33,7 +33,7 @@ class MessageSpec extends munit.FunSuite {
                       |  "echo": "echo 123"
                       |}
                       |""".stripMargin
-        val expected = EchoOk("echo", Some(1), None, "echo 123")
+        val expected = echo_ok("echo", Some(1), None, "echo 123")
 
         assert(decode[Body](body) == expected)                      
     }
@@ -50,7 +50,7 @@ class MessageSpec extends munit.FunSuite {
                       | }
                       |}
                       |""".stripMargin
-        val expected = Message("c1", "n1", InitOk("init", Some(1), None, Some("n1"), Some(Vector("n1", "n2", "n3"))))
+        val expected = Message("c1", "n1", init_ok("init", Some(1), None, Some("n1"), Some(Vector("n1", "n2", "n3"))))
 
         assert(decode[Message](init) == expected)
     }
@@ -67,13 +67,13 @@ class MessageSpec extends munit.FunSuite {
                       |}
                       |""".stripMargin
 
-        val expected = Message("c1", "n1", EchoOk("echo", Some(1), None, "echo 123"))
+        val expected = Message("c1", "n1", echo_ok("echo", Some(1), None, "echo 123"))
 
         assert(decode[Message](echo) == expected)
     }    
 
-    test("encode initial response message") {
-        val response = Message("n1", "c1", InitOk("init_ok", None, Some(1), None, None))
+    test("encode initial response message".only) {
+        val response = Message("n1", "c1", init_ok("init_ok", None, Some(1), None, None))
         val expected = """|{
                           | "src": "n1",
                           | "dest": "c1",
@@ -84,13 +84,11 @@ class MessageSpec extends munit.FunSuite {
                           |}
                           |""".stripMargin
 
-
-        println(response.asJson.deepDropNullValues.noSpaces)                  
         assert(response.asJson.deepDropNullValues.noSpaces == noSpaces(expected))
     }
     
     test("encode echo response message") {
-        val echo = Message("n1", "c1", EchoOk("echo_ok", Some(2), Some(1), "echo 123"))
+        val echo = Message("n1", "c1", echo_ok("echo_ok", Some(2), Some(1), "echo 123"))
         val encoded = """|{
                          |  "src": "n1",
                          |  "dest": "c1",

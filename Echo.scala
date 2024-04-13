@@ -24,16 +24,16 @@ object Echo extends IOApp.Simple {
       src = m.dest,
       dest = m.src,
       body = m match {
-        case Message(_, _, body: InitOk) =>
-          InitOk(
+        case Message(_, _, body: init_ok) =>
+          init_ok(
             msg_id = responseId.some,
             `type` = "init_ok",
             node_id = None,
             node_ids = None,
             in_reply_to = body.msg_id
           )
-        case Message(_, _, body: EchoOk) =>
-          EchoOk(
+        case Message(_, _, body: echo_ok) =>
+          echo_ok(
             `type` = "echo_ok",
             msg_id = responseId.some,
             in_reply_to = body.msg_id,

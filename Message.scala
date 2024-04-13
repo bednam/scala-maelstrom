@@ -4,15 +4,14 @@
 //> using dep io.circe::circe-generic-extras::0.14.3
 import io.circe._
 import io.circe.syntax._
-import io.circe.generic.semiauto._
 import io.circe.generic.extras.Configuration
 import io.circe.generic.extras.auto._
+import io.circe.generic.extras.semiauto._
 
 object Message {
   implicit val config: Configuration =
-    Configuration.default.withSnakeCaseMemberNames.withDiscriminator("type")
+    Configuration.default.withDiscriminator("type")
 
-  // 1. when sealed trait, when sealed abstract class, anything else?
   /** @param src
     *   A string identifying the node this message came from
     * @param dest
@@ -21,13 +20,7 @@ object Message {
     *   An object: the payload of the message
     */
   case class Message(src: String, dest: String, body: Body)
-  // implicit val messageEncoder: Encoder[Message] = Encoder.instance { m =>
-  //   Json.obj(
-  //     "src" := m.src,
-  //     "dest" := m.dest,
-  //     "body" := m.body.asJson
-  //   )
-  // }
+
   implicit val messageEncoder: Encoder[Message] = deriveEncoder
   implicit val messageDecoder: Decoder[Message] = deriveDecoder
 
@@ -46,23 +39,24 @@ object Message {
 
   implicit val bodyDecoder: Decoder[Body] = (cursor: HCursor) =>
     cursor.downField("type").as[String] match {
-      case Right("init") => cursor.as[InitOk]
-      case Right("echo") => cursor.as[EchoOk]
+      case Right("init") => cursor.as[init_ok]
+      case Right("echo") => cursor.as[echo_ok]
+      case Right("generate") => cursor.as[generate_ok]
       case Right(t) =>
         Left(DecodingFailure(s"Unsupported message type: $t", cursor.history))
       case Left(e) => Left[DecodingFailure, Body](e)
     }
 
-  implicit val bodyEncoder: Encoder[Body] =
-    deriveEncoder[Body].mapJsonObject(json =>
-      json("type").flatMap(_.hcursor.downField("type").as[String].toOption) match {
-        case Some("InitOk") => json.add("type", "init_ok".asJson)
-        case Some("EchoOk") => json.add("type", "echo_ok".asJson)
-        case _ => json
-      }
-    )
+  // implicit val bodyEncoder: Encoder[Body] =
+  //   deriveEncoder[Body].mapJsonObject(json =>
+  //     json("type").flatMap(_.hcursor.downField("type").as[String].toOption) match {
+  //       case Some("InitOk") => json.add("type", "init_ok".asJson)
+  //       case Some("EchoOk") => json.add("type", "echo_ok".asJson)
+  //       case _ => json
+  //     }
+  //   )
 
-  case class InitOk(
+  case class init_ok(
       `type`: String,
       msg_id: Option[Int],
       in_reply_to: Option[Int],
@@ -70,14 +64,23 @@ object Message {
       node_ids: Option[Vector[String]]
   ) extends Body
 
-  implicit val initOkDecoder: Decoder[InitOk] = deriveDecoder
+  implicit val initOkDecoder: Decoder[init_ok] = deriveDecoder
 
-  case class EchoOk(
+  case class echo_ok(
       `type`: String,
       msg_id: Option[Int],
       in_reply_to: Option[Int],
       echo: String
   ) extends Body
 
-  implicit val echoOkDecoder: Decoder[EchoOk] = deriveDecoder
+  implicit val echoOkDecoder: Decoder[echo_ok] = deriveDecoder
+
+  case class generate_ok(
+      `type`: String,
+      msg_id: Option[Int],
+      in_reply_to: Option[Int],
+      id: Option[String]
+  ) extends Body
+
+  implicit val generateOkDecoder: Decoder[generate_ok] = deriveDecoder
 }
